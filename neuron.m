@@ -4,6 +4,7 @@ classdef neuron < handle
        id  
        rois % coordinates of all the pixels in the rois 
        traces
+       f0 % mean baseline value inside neuron's ROI
        filtered_traces 
        trace_stats % summary statistics of individual traces 
        markers % fluorescent markers: identity and mean intensity 
@@ -15,6 +16,7 @@ classdef neuron < handle
                 obj.id = id;
                 obj.rois = containers.Map;
                 obj.traces = containers.Map;
+                obj.f0 = containers.Map; 
                 obj.filtered_traces = containers.Map;
                 obj.trace_stats = containers.Map; 
                 obj.markers = containers.Map; 
@@ -27,10 +29,11 @@ classdef neuron < handle
              movie_exists = obj.rois.isKey(movie_name);
          end
         
-        function [] = addMovie(obj, movie_name, roi, trace)
+        function [] = addMovie(obj, movie_name, roi, trace, f0)
             if ~movieExists(obj, movie_name)
                 obj.rois(movie_name) = roi;  
                 obj.traces(movie_name) = trace;
+                obj.f0(movie_name) = f0; 
                 obj.filtered_traces(movie_name) = []; % filtering has not yet happened
             else
                 error('The data entries for this movie already exist. To update the entries, use the set methods: setROI, setTrace, etc.'); 
@@ -43,6 +46,8 @@ classdef neuron < handle
                     overwrite = isKey(obj.rois, movie_name);
                 case 'trace'
                     overwrite = isKey(obj.traces, movie_name);
+                case 'f0'
+                    overwrite = isKey(obj.fo, movie_name); 
                 case 'filtered trace'
                     overwrite = isKey(obj.filtered_traces, movie_name) && ~isempty(obj.filtered_traces(movie_name));
                 case 'trace_stat'
@@ -74,6 +79,14 @@ classdef neuron < handle
         function trace = getTrace(obj, movie_name)
             if movieExists(obj, movie_name)
                 trace = obj.traces(movie_name);
+            else
+                error('There is no movie of that name for this neuron'); 
+            end
+        end
+        
+        function f0 = getF0(obj, movie_name)
+            if movieExists(obj, movie_name)
+                f0 = obj.f0(movie_name);
             else
                 error('There is no movie of that name for this neuron'); 
             end

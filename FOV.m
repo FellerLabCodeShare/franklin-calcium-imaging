@@ -109,10 +109,7 @@ classdef FOV < handle
        end
        
        % Plot the traces for all the neurons from one movie 
-       function h = plotTracesSimple(obj, framerate)
-           
-           % Offset for the label text
-           fixed_offset = 0.1; 
+       function h = plotTracesSimple(obj, framerate, offset, active_thresh)
            
            % Keep track of where I'm plotting
            cur_position = 0; 
@@ -133,13 +130,19 @@ classdef FOV < handle
                    
                    % Offset for the trace
                    %offset = -i*fixed_offset - max(cur_trace);
-                   cur_position = cur_position - fixed_offset; 
+                   cur_position = cur_position - offset; 
                    
                    time = (1:max(size(cur_trace))) ./ framerate;
                    h = plot(time, cur_trace + cur_position, 'k', 'LineWidth', 0.25);
+                   
+                   % Plot trace in red for times when the cell is active 
+                   active_trace = cur_trace;
+                   active_trace(active_trace < active_thresh) = NaN; 
+                   plot(time, active_trace + cur_position, 'r', 'LineWidth', 0.25);
+                   
                    label_text = num2str(ids{i});
                    figure(traces_fig);
-                   text(size(cur_trace, 1)/framerate + fixed_offset, cur_position ,label_text);
+                   text(size(cur_trace, 1)/framerate + offset, cur_position ,label_text);
                else
                    warning('This neuron has no entry for the movie');
                end
@@ -152,9 +155,9 @@ classdef FOV < handle
        set(gca,'ycolor',get(gcf,'color'));
        set(gca,'ytick',[]);
        
-       % scalebar (100% dF/F, 60 s):
+       % scalebar (1% dF/F, 60 s):
        plot([0,60],[0,0],'k');
-       plot([0,0],[0,1],'k');
+       plot([0,0],[0,0.01],'k');
        hold off
        
    end

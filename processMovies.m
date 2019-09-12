@@ -20,11 +20,12 @@ function [d] = processMovies(data_guide_name)
     % Iterate over the movies referenced in each row of the data guide
     for i = 1:size(d,1)
 
-        % If there is not already a dataset for this movie...
-        if ismissing(d.data_name(i))
+        % If there is not already a dataset for this movie and the data
+        % should be included
+        if ismissing(d.data_name(i)) && d.include(i) 
             
             % Let the user know
-            disp(['Dataset not found for ', d.movie_name(i), ', making a new one']); 
+            disp(['Dataset not found for ', d.movie_name{i}, ', making a new one']); 
             
             % Process the movie to create the dataset
             dataset = processMovie(d, i);
@@ -33,7 +34,9 @@ function [d] = processMovies(data_guide_name)
             d.data_name(i) = nameDataset(d, i);
             
             % Save the dataset
+            tic;
             saveDataset(dataset, d, i);
+            disp(['Took ', num2str(toc), ' to save the dataset']); 
             
         end
     end
@@ -64,27 +67,33 @@ function [fov] = processMovie(d, i)
     % and date. Here, the name will be the virus, well number, and fov
     % number
     fov = FOV([d.virus{i}, ' well ', num2str(d.well_n(i)),...
-        ' fov ', num2str(d.fov_n(i))], d.date(i));
+        ' fov ', d.plate{i}], d.date(i));
     
     % Loads the movie
+    tic;
     m = loadMovie(d, i); 
+    disp(['Took ', num2str(toc), ' to load the movie']); 
     
     % Makes a delta F/F movie from the raw movie 
-    m_df_overf = makeDFOverF(m);
+    tic;
+    [m_df_overf, f0] = makeDFOverF(m);
+    disp(['Took ', num2str(toc), ' to make a DF/F movie']); 
     
     % Loads regions of interest for the Neurons in the FOV
     rois = loadROIs(d, i);
     
     % Adds neurons to the FOV object 
-    fov = addNeurons(d.movie_name{i}, fov, rois, m_df_overf);
+    tic; 
+    fov = addNeurons(d.movie_name{i}, fov, rois, m_df_overf, f0);
+    disp(['Took ', num2str(toc), ' to generate Neuron objects']); 
     
 end
 
 % Adds neurons to a FOV 
-function [fov] = addNeurons(movie_name, fov, rois, m_df_overf)
+function [fov] = addNeurons(movie_name, fov, rois, m_df_overf, f0)
 
     % Get traces (what are the dimensions of the array?) and a mask of the rois 
-    [traces, rois_mask] =  getRoiTraces(m_df_overf, rois); 
+    [traces, f0s, rois_mask] = getRoiTraces_culture(m_df_overf, f0, rois); 
     
     % Neuron IDs will be their numbering in the ROI mask
     ids = unique(rois_mask);
@@ -96,11 +105,11 @@ function [fov] = addNeurons(movie_name, fov, rois, m_df_overf)
     for i = 1:length(ids)
         id = ids(i);
         
-        % Create the neuron object 
+        % Create the neuron object  
         n = neuron(id);
         
         % Add a movie to the neuron object 
-        n.addMovie(movie_name, rois{i}, traces{i});
+        n.addMovie(movie_name, rois{i}, traces{i}, f0s(i));
         
         % Add the neuron to the field of view object
         fov.addNeuron(n);
@@ -115,17 +124,23 @@ function [m] = loadMovie(d, i)
 end
 
 % Makes a deltaF/F movie from a raw movie 
-function [m_df_overf] = makeDFOverF(m)
+function [m_df_overf, f0] = makeDFOverF(m)
 
-    % Convert the move to double precision floating point numbers so that
+    % Convert the movie to double precision floating point numbers so that
     % image math works well
     m = double(m); 
     
     % Baseline image is the median projection.
-    f0 = median(m, 3);
+    %f0 = median(m, 3);
+    
+    % Baseline image is the bottom 5th percentile projection
+    f0 = prctile(m, 5, 3); 
     
     % Subtract off the baseline and normalize by the baseline.
     m_df_overf = (m - f0) ./ f0; 
+    
+    % Convert movie back to uint16 so subsequent steps go faster
+    %m_df_overf = uint16(m_df_overf); 
     
 end
 
@@ -134,8 +149,8 @@ function [rois] = loadROIs(d, i)
 
     % Infer the name of the roi file from other information in the table.
     % This requireds that the roi file has a very standard name. 
-    filename_suffix = ['rois for ', d.virus{i}, ...
-        ' well ', num2str(d.well_n(i)), ' fov ', num2str(d.fov_n(i)), '.zip'];  
+    [~, movie_name, ~] = fileparts(d.movie_name{i});
+    filename_suffix = ['rois for ', movie_name, '.zip'];  
     
     % Combine the filename and path 
 	filename = fullfile(d.path{i}, filename_suffix);
@@ -162,7 +177,7 @@ end
 % of view number associated with the dataset in the table. 
 function [name] = nameDataset(d, i)
     name = [d.virus{i}, '_', num2str(d.date(i)), '_well_', ...
-        num2str(d.well_n(i)), '_fov_', num2str(d.fov_n(i))];
+        num2str(d.well_n(i)), '_plate_', d.plate{i}];
 end
 
 
